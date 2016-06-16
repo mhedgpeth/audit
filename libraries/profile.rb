@@ -64,9 +64,11 @@ class ComplianceProfile < Chef::Resource # rubocop:disable Metrics/ClassLength
       access_token = retrieve_access_token unless refresh_token.nil?
 
       if access_token # go direct
-        reqpath ="owners/#{o}/compliance/#{p}/tar"
+        fail 'server must be defined to the compliance server when access token is defined' if server.nil?
+        puts "Fetching profile #{o}/#{p} directly from the Compliance Server at #{server}"
+        reqpath = "owners/#{o}/compliance/#{p}/tar"
         url = construct_url(server, reqpath)
-        Chef::Log.info "Load profile from: #{url}"
+        Chef::Log.debug "Load profile from: #{url}"
 
         tf = Tempfile.new('foo', Dir.tmpdir, 'wb+')
         tf.binmode
@@ -82,6 +84,7 @@ class ComplianceProfile < Chef::Resource # rubocop:disable Metrics/ClassLength
         end
         tf.flush
       else # go through Chef::ServerAPI
+        Chef::Log.info "Fetching profile #{o}/#{p} from Chef Server #{base_chef_server_url}"
         reqpath ="organizations/#{org}/owners/#{o}/compliance/#{p}/tar"
         url = construct_url(base_chef_server_url + '/compliance/', reqpath)
         Chef::Log.info "Load profile from: #{url}"
@@ -120,12 +123,14 @@ class ComplianceProfile < Chef::Resource # rubocop:disable Metrics/ClassLength
     end
 
     converge_by 'create/verify cache directory' do
-      directory(::File.join(Chef::Config[:file_cache_path], 'compliance')).run_action(:create)
+      directory(compliance_cache_path).run_action(:create)
     end
 
     converge_by 'execute compliance profile' do
+      puts 'HERE!!!'
       path ||= tar_path
       report_file = report_path
+      Chef::Log.info "Executing profile at #{path} and reporting to #{report_file}"
 
       supported_schemes = %w{http https supermarket compliance chefserver}
       if !supported_schemes.include?(URI(path).scheme) && !::File.exist?(path)
@@ -134,12 +139,12 @@ class ComplianceProfile < Chef::Resource # rubocop:disable Metrics/ClassLength
         return
       end
 
-      Chef::Log.info "Executing: #{path}"
+      Chef::Log.info "Running inspec against profile at: #{path}"
 
       # TODO: flesh out inspec's report CLI interface,
       #       make this an execute[inspec check ...]
       output = quiet ? ::File::NULL : $stdout
-      runner = ::Inspec::Runner.new('report' => true, 'format' => 'json-min', 'output' => output)
+      runner = ::Inspec::Runner.new(report: true, format: 'json-min', output: output, profiles_path: compliance_cache_path)
       runner.add_target(path, {})
       begin
         runner.run
@@ -172,27 +177,19 @@ class ComplianceProfile < Chef::Resource # rubocop:disable Metrics/ClassLength
     end
   end
 
+  def compliance_cache_path
+    ::File.join(Chef::Config[:file_cache_path], 'compliance')
+  end
+
   def tar_path
     return path if path
     o, p = normalize_owner_profile
-    case node['platform']
-    when 'windows'
-      windows_path = Chef::Config[:file_cache_path].tr('\\', '/')
-      ::File.join(windows_path, 'compliance', "#{o}_#{p}.tgz")
-    else
-      ::File.join(Chef::Config[:file_cache_path], 'compliance', "#{o}_#{p}.tgz")
-    end
+    ::File.join(compliance_cache_path, "#{o}_#{p}.tgz")
   end
 
   def report_path
     o, p = normalize_owner_profile
-    case node['platform']
-    when 'windows'
-      windows_path = Chef::Config[:file_cache_path].tr('\\', '/')
-      ::File.join(windows_path, 'compliance', "#{o}_#{p}_report.json")
-    else
-      ::File.join(Chef::Config[:file_cache_path], 'compliance', "#{o}_#{p}_report.json")
-    end
+    ::File.join(compliance_cache_path, "#{o}_#{p}_report.json")
   end
 
   def org

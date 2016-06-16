@@ -33,10 +33,10 @@ directory compliance_cache_directory
 node['audit']['profiles'].each do |owner_profile, value|
   case value
   when Hash
-    next if value['disabled']
+    profile_enabled = !value['disabled']
     path = value['source']
   else
-    next if value == false
+    profile_enabled = value
   end
   fail "Invalid profile name '#{owner_profile}'. "\
        "Must contain /, e.g. 'john/ssh'" if owner_profile !~ %r{\/}
@@ -47,6 +47,11 @@ node['audit']['profiles'].each do |owner_profile, value|
     action :nothing
   end
 
+  profile_actions = [:fetch] # always fetch the profile
+  if profile_enabled
+    profile_actions.push :execute # execute when the profile is enabled
+  end
+
   # execute profile
   compliance_profile p do
     owner o
@@ -55,8 +60,8 @@ node['audit']['profiles'].each do |owner_profile, value|
     path path unless path.nil?
     inspec_version node['audit']['inspec_version']
     quiet node['audit']['quiet']
-    only_if { profile_overdue_to_run?(p, interval_seconds) }
-    action [:fetch, :execute]
+    only_if { profile_overdue_to_run?(p, interval_seconds) || !profile_enabled } # always run a fetch so dependencies are up to date
+    action profile_actions
     notifies :touch, "file[#{compliance_cache_directory}/#{p}]", :immediately
   end
 end

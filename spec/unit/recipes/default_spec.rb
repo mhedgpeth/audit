@@ -63,8 +63,8 @@ describe 'audit::default' do
       )
     end
 
-    it 'skips compliance_profile[ssh]' do
-      expect(chef_run).to_not fetch_compliance_profile('ssh')
+    it 'fetches but does not execute compliance_profile[ssh]' do
+      expect(chef_run).to fetch_compliance_profile('ssh')
       expect(chef_run).to_not execute_compliance_profile('ssh')
     end
 
@@ -145,7 +145,10 @@ describe 'audit::default' do
 
     let(:chef_run) do
       runner = ChefSpec::ServerRunner.new(platform: 'centos', version: '6.5')
-      runner.node.set['audit']['profiles'] = { 'admin/myprofile' => true }
+      runner.node.set['audit']['profiles'] = {
+                                               'admin/myprofile' => true,
+                                               'base/ssh' => false
+                                             }
       runner.node.set['audit']['interval']['enabled'] = true
       runner.converge(described_recipe)
     end
@@ -153,6 +156,11 @@ describe 'audit::default' do
     it 'does not fetch or execute on compliance profile' do
       expect(chef_run).to_not fetch_compliance_profile('myprofile')
       expect(chef_run).to_not execute_compliance_profile('myprofile')
+    end
+
+    it 'fetches but does not execute disabled profile so it is up to date as a dependency when compliance next runs' do
+      expect(chef_run).to fetch_compliance_profile('ssh')
+      expect(chef_run).to_not execute_compliance_profile('ssh')
     end
 
     it 'converges successfully' do
