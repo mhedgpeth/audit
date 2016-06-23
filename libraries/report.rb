@@ -67,6 +67,9 @@ class ComplianceReport < Chef::Resource
       end
       fail "#{total_failed} audits have failed.  Aborting chef-client run." if total_failed > 0 && run_context.node.audit.fail_if_any_audits_failed
     end
+
+    extend ResourceQuieter
+    quiet_converge_if_configured 
   end
 
   # filters resource collection

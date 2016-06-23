@@ -105,6 +105,9 @@ class ComplianceProfile < Chef::Resource # rubocop:disable Metrics/ClassLength
       end
 
     end
+
+    extend ResourceQuieter
+    quiet_converge_if_configured 
   end
 
   action :execute do
@@ -153,6 +156,9 @@ class ComplianceProfile < Chef::Resource # rubocop:disable Metrics/ClassLength
         sensitive true
       end
     end
+
+    extend ResourceQuieter
+    quiet_converge_if_configured 
   end
 
   def check_inspec
